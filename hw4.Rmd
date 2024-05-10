@@ -1,0 +1,78 @@
+---
+title: "Homework 4: Large-scale Distributed Computing for Identifying Lyman-break Galaxies"
+author: "Jacob Christensen"
+email: "Jrchristens2@wisc.edu"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: html_document
+---
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(FITSio, quietly = TRUE, warn.conflicts = FALSE)
+library(ggplot2, quietly = TRUE, warn.conflicts = FALSE)
+library(dplyr, quietly = TRUE, warn.conflicts = FALSE)
+library(readr, quietly = TRUE, warn.conflicts = FALSE)
+```
+
+## **Introduction**
+
+This project represents an expansion of Homework 2, utilizing the Center for High Throughput Computing (CHTC) to conduct a full-scale search for an undiscovered, gravitationally lensed, high-redshift Lyman-break galaxy. By processing approximately 2.5 million spectra, this endeavor aims to leverage large-scale distributed computing to enhance both efficiency and scalability.
+
+## **Data Loading**
+```{r}
+# Load the best 100 spectra results
+results <- read.csv("hw4best100.csv")
+
+# Load the cB58 spectrum
+cB58_data <- readFrameFromFITS("cB58_Lyman_break.fit")
+cB58_flux <- cB58_data$FLUX
+
+# Standardize the flux vector for comparison
+standardize_vector <- function(vec) {
+  (vec - mean(vec, na.rm = TRUE)) / sd(vec, na.rm = TRUE)
+}
+cB58_flux_standardized <- standardize_vector(cB58_flux)
+
+```
+
+## **Plot Comparisons**
+```{r}
+# Define top_spectra for the top 10 comparisons
+top_spectra <- head(results, 10)
+
+# Function to plot and compare spectra
+plot_flux_comparison <- function(cB58_data, spectrum_path, spectrum_id, shift) {
+  spectrum_data <- readFrameFromFITS(spectrum_path)
+  len <- length(cB58_data$FLUX)  # Assuming cB58_data uses 'FLUX'
+  shifted_flux <- c(rep(NA, shift), spectrum_data$flux)[1:len]  # Changed from FLUX to flux
+  standardized_flux <- standardize_vector(shifted_flux[!is.na(shifted_flux)])
+  if (length(standardized_flux) < len) {
+    standardized_flux <- c(standardized_flux, rep(NA, len - length(standardized_flux)))
+  }
+  plot_data <- data.frame(
+    Index = 1:len,
+    cB58_Flux = cB58_flux_standardized,
+    Spectrum_Flux = standardized_flux
+  )
+  ggplot(plot_data, aes(x = Index)) +
+    geom_line(aes(y = cB58_Flux, color = "cB58")) +
+    geom_line(aes(y = Spectrum_Flux, color = "Spectrum"), na.rm = TRUE) +
+    scale_color_manual(values = c("cB58" = "red", "Spectrum" = "blue")) +
+    labs(title = sprintf("Flux Comparison: cB58 vs %s (shifted by %d)", spectrum_id, shift), color = "Spectrum") +
+    theme_minimal() +
+    theme(legend.title = element_blank())
+}
+
+# Iterate over the top 10 spectra and directly print the plots
+for (i in 1:nrow(top_spectra)) {
+  spectrum_info <- top_spectra[i, ]
+  spectrum_id <- spectrum_info$spectrumID
+  shift <- spectrum_info$i
+  spectrum_path <- sprintf("extracted_fits/%s", spectrum_id)
+  plot <- plot_flux_comparison(cB58_data, spectrum_path, spectrum_id, shift)
+  print(plot)  # Directly print the plot here
+}
+```
+
+## **Discussion**
+Throughout this project, we encountered several challenges related to the scaling up of our computations on the CHTC platform. Managing the load and optimizing the performance to handle 2.5 million spectra required careful consideration of job distribution, memory management, and computational efficiency. The experience provided valuable insights into the practical aspects of conducting large-scale data science within a distributed computing environment.
